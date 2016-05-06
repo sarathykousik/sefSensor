@@ -1,0 +1,86 @@
+% function output = fif_file_preproc(file_name,subj, condN ,proc)
+clc;    clear all;     close all;
+ft_defaults;
+% addpath('C:\Program Files\MATLAB\R2012b\toolbox_add_on\SEF')
+no = 1
+
+proc                             = [];
+proc.data_folder                 = 'C:\Program Files\MATLAB\R2012b\toolbox_add_on';
+proc.stim_chan                   = 'STI101';
+% proc.pre_stim_time               = -5;
+% proc.post_stim_time              =  10;
+% proc.save_folder                 = 'J:\MEGData';
+
+cd(proc.data_folder)
+filenames      = dir('*.fif');
+
+%
+cfg                         = [];
+cfg.dataset                 = filenames(no).name;
+proc.data_import            = ft_preprocessing(cfg);
+
+% Find epochs
+cfg = [];
+cfg.trialdef.prestim        = 0.1;
+cfg.trialdef.poststim       = 0.2;
+cfg.trialdef.eventtype      = proc.stim_chan ; 
+% cfg.trialdef.eventvalue     = 5;
+cfg.dataset                 = filenames(no).name;%filenames(condLoop).name;
+proc.data_trial             = ft_definetrial(cfg);
+
+% Blanking
+% proc.blank_seq              = ones(size(proc.data_import.trial{1},2),1);
+% for ind = proc.pre_stim_time:proc.post_stim_time
+%     proc.blank_seq(proc.data_trial.trl(:,1)+(cfg.trialdef.prestim*1000)+ind) = 0;
+% end
+
+% proc.MEG_channel            = find(strncmp(proc.data_import.label, 'MEG',3)==1);                    % Pick only MEG channels
+% proc.data_import.trial{1}(proc.MEG_channel,:) = ...
+%         bsxfun(@times, proc.data_import.trial{1}(proc.MEG_channel,:), proc.blank_seq');  % Multiply blanking sequence with MEG channels
+
+% Filtering, Baseline correction and extraction of MEG channels only
+cfg                         = [];
+cfg.lpfilter                = 'yes';
+cfg.lpfreq                  =  40;
+cfg.hpfilter                = 'yes';
+cfg.hpfreq                  =  2;
+cfg.dftfilter               = 'yes';
+cfg.channel                 =  {'MEG'}; 
+cfg.detrend                 = 'yes';
+proc.preproc_data_MEG       = ft_preprocessing(cfg, proc.data_import);
+
+proc.data_epoched           = ft_redefinetrial(proc.data_trial,proc.preproc_data_MEG);
+
+% Time locked averages - selected trials
+[trial_values] = unique(proc.data_epoched.trialinfo);
+
+cfgtlck = [];
+cfgtlck.removemean = 'yes';
+cfgtlck.channel = 'MEGGRAD';
+
+
+%
+trial_value = 11;
+
+cfgtlck.trials = find(proc.data_epoched.trialinfo==trial_value);
+
+tlck = ft_timelockanalysis(cfgtlck,proc.data_epoched);
+
+tlckCmb = ft_combineplanar([],tlck);
+
+%
+cfgbsl = [];
+cfgbsl.baseline = [-50 0];
+cfg                     = [];
+cfg.parameter           = 'avg';
+cfg.colorbar            = 'no';
+cfg.layout              = 'neuromag306cmb.lay';
+cfg.shading             = 'interp';
+cfg.maskstyle           = 'saturation';	 
+% cfg.channel           = {'all', '-MEG2342+2343'}; % Delete artefacted channels
+figure(1);
+cfg.xlim                = [0.075 0.120];
+
+% ft_topoplotER(cfg, ft_timelockbaseline(cfgbsl,tlckCmb{loop}))
+ft_topoplotER(cfg, tlckCmb)
+
